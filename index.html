@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>raycast-engine</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="screen"></canvas>
+
+  <script>
+    const WIDTH = 180;
+    const HEIGHT = 110;
+    const FOV = 60.0;
+    const CELL_WIDTH = 100;
+    const MAZE_WIDTH = 18;
+    
+    
+    const MAP =[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+                1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+                1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+                1,0,0,0,0,0,0,1,0,0,1,1,1,1,0,0,1,1, // small side room on left
+                1,0,0,0,0,0,0,1,0,0,1,1,1,1,0,0,1,1,
+                1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,
+                1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1, // hallway turns right here
+                1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,1,
+                1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1, // side rooms on new leg
+                1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,
+                1,1,1,1,1,0,0,0,1,1,1,1,1,0,0,1,1,1,
+                1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,
+                1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,
+                1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+
+    const SCALE = 4;
+    const canvas = document.getElementById("screen");
+    // const dpr = window.devicePixelRatio || 1;
+
+    canvas.width  = WIDTH;
+    canvas.height = HEIGHT;
+    canvas.style.width  = WIDTH * SCALE + "px";
+    canvas.style.height = HEIGHT * SCALE + "px";
+    const ctx = canvas.getContext("2d");
+    //ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    //ctx.imageSmoothingEnabled = false;
+
+    //const imageData = ctx.getImageData(0,0, WIDTH, HEIGHT);
+    const imageData = ctx.createImageData(WIDTH, HEIGHT);
+    const buffer = imageData.data; // Uint8ClampedArray
+
+    // Simple "cursor"
+    let x = 300.0;
+    let y = 300.0;
+    let rot = 0.0;
+
+    function clear() {
+          
+      for (let i = 0; i < buffer.length; i++) {
+        buffer[i] = 0;
+      }
+
+    }
+
+    function setPixel(x, y, r, g, b) {
+      if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
+      const i = (y * WIDTH + x) * 4;
+      buffer[i + 0] = r;
+      buffer[i + 1] = g;
+      buffer[i + 2] = b;
+      buffer[i + 3] = 255;
+    }
+
+
+    function setCol(x_col, ystart, ystop, r, g, b) {
+      ystart = Math.floor(ystart);
+      ystop  = Math.floor(ystop);
+      for (let y_col = ystart; y_col < ystop; y_col++){
+        setPixel(x_col,y_col, r, g, b);
+      }
+    }
+
+
+    function draw_maze(){
+      let x_p = x / CELL_WIDTH;
+      let y_p = y / CELL_WIDTH;
+
+      let rot_rad = rot / 180 * Math.PI;
+      let fov_rad = FOV / 180 * Math.PI;
+      let angle_step = fov_rad / (WIDTH);
+
+      for(let x_col = 0; x_col < WIDTH; x_col++){
+        let ray_angle = rot_rad - (fov_rad/2) + (x_col * angle_step);
+        //let cameraX = 2 * x_col / WIDTH - 1; // [-1, 1]
+        //let ray_angle = rot_rad + Math.atan(cameraX * Math.tan(fov_rad / 2));
+        // if (x_col === Math.floor(WIDTH / 2)) {
+        //   console.log(ray_angle - rot_rad);
+        // }
+
+
+        let dx = Math.cos(ray_angle);
+        let dy = Math.sin(ray_angle);
+
+        let delta_x = Math.abs(1/dx);
+        let delta_y = Math.abs(1/dy);
+
+        let map_x = Math.floor(x_p);
+        let map_y = Math.floor(y_p);
+
+        let step_x, step_y, side_x, side_y;
+
+        if (dx < 0) {
+          step_x = -1;
+          side_x = (x_p - map_x) * delta_x;
+        } else {
+          step_x = 1;
+          side_x = (map_x + 1.0 - x_p) * delta_x;
+        }
+
+        if (dy < 0) {
+          step_y = -1;
+          side_y = (y_p - map_y) * delta_y;
+        } else {
+          step_y = 1;
+          side_y = (map_y + 1.0 - y_p) * delta_y;
+        }
+
+        let hit = false;
+        let side;
+        let steps = 0;
+        while (steps <= 20){
+          if (side_x < side_y) {
+            side_x += delta_x;
+            map_x += step_x;
+            side = 0; // hit vertical side
+          } else {
+            side_y += delta_y;
+            map_y += step_y;
+            side = 1; // hit horizontal side
+          }
+          if (MAP[map_y * MAZE_WIDTH + map_x] === 1) {
+            hit = true;
+            break;
+          }
+          steps++;
+        }
+
+        if (!hit) continue
+        let perpWallDist;
+        if (side == 0) {
+          perpWallDist = (side_x - delta_x);
+        }else{
+          perpWallDist = (side_y - delta_y);
+        }
+        perpWallDist *= Math.cos(ray_angle - rot_rad);
+        let proj_dist = (WIDTH/2) / Math.tan(fov_rad/2);
+
+        let wall_h = Math.floor(proj_dist / perpWallDist);
+        let color = (side == 0) ? 150 : 200;
+        //console.log(x_col)
+        if(x_col >= 300) console.log(x_col)
+        setCol(x_col, (HEIGHT/2) - (wall_h/2), (HEIGHT/2) + (wall_h/2), color,color,color);
+
+
+      }
+
+    }
+    
+
+
+
+    function draw() {
+      clear();
+      draw_maze();
+      ctx.putImageData(imageData, 0,0);
+      requestAnimationFrame(draw);
+    }
+
+        
+
+    window.addEventListener("keydown", e => {
+      m = 0
+      if (e.key === "ArrowLeft")  rot -= 4.5;
+      if (e.key === "ArrowRight") rot += 4.5;
+      if (e.key === "ArrowUp")    m += 5;
+      if (e.key === "ArrowDown")  m -= 5;
+      let rot_rad = rot * Math.PI / 180;
+      x += m * Math.cos(rot_rad)
+      y += m * Math.sin(rot_rad)
+    });
+
+    
+
+    draw();
+  </script>
+</body>
+</html>
