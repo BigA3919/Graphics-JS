@@ -25,7 +25,7 @@
     const HEIGHT = 110;
     const FOV = 60.0;
 
-    const SCALE = 5;
+    const SCALE = 3;
     const canvas = document.getElementById("screen");
     // const dpr = window.devicePixelRatio || 1;
 
@@ -41,31 +41,128 @@
     const imageData = ctx.createImageData(WIDTH, HEIGHT);
     const buffer = imageData.data; // Uint8ClampedArray
 
+
+    const wireframe = false
     // Simple "cursor"
-    let camera ={
-        x:0,
-        y:0,
-        z:0,
+    let cam ={
+        m: [0,0,0],
         dist:10,
-        dir:0,
+        r: [0,0,0],
+        fov: Math.PI/3,
+        Zfar: 1000,
+        Znear: 0.1,
         get_rad: function() {return dir / 180 * Math.PI}
 
     }
 
-    let point_1 ={
-        x:200,
-        y:200
+
+    // const projection_matrix = [
+    //   [(HEIGHT/WIDTH) * (1/Math.tan(cam.fov/2)), 0, 0, 0],
+    //   [0, 1/Math.tan(cam.fov/2), 0, 0],
+    //   [0, 0, cam.Zfar/(cam.Zfar-cam.Znear), 1],
+    //   [0, 0, (-cam.Zfar * cam.Znear)/(cam.Zfar-cam.Znear), 0]
+    // ]
+
+    
+
+
+    class Point {
+      constructor(x,y,z){
+        this.x = x
+        this.y = y
+        this.z = z
+      }
+      /**
+       * 
+       */
+      matrix(){
+        return [this.x,this.y,this.z]
+      }
+      fill() {
+        setPixel(this.x, this.y, 250,250,250)
+      }
     }
 
-    let point_2 ={
-        x:70,
-        y:10
+    
+
+    class Rect_Face {
+      constructor(tr, bl, z){
+        this.tl = new Point(bl[0], tr[1], z[1])
+        this.tr = new Point(tr[0], tr[1], z[2])
+        this.bl = new Point(bl[0], bl[1], z[0])
+        this.br = new Point(tr[0], bl[1], z[3])
+        this.points = [this.bl, this.tl, this.tr, this.br]
+      }
+
+      draw() {
+        //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
+        const plist = this.points.map(point => non_matrix_projection(point))
+        //const plist = this.points.map(point => point)
+        draw_tri_standard(plist[0], plist[1], plist[2])
+        draw_tri_standard(plist[2], plist[3], plist[0])
+        plist.forEach((p) => {p.fill()})
+      }
     }
 
-    let point_3 = {
-        x:30,
-        y:50
+    
+
+    faces = [new Rect_Face([-10, -10], [10,10], [10,10,10,10]), new Rect_Face([-10,-10], [-10,10],[20,20,10,10])]
+
+    function non_matrix_projection(i){
+
+      let d = new Point(i.x-cam.m[0], i.y-cam.m[1], i.z-cam.m[2])
+      const rot_m_1 = [
+        [1, 0, 0],
+        [0, Math.cos(cam.r[0]), Math.sin(cam.r[0])],
+        [0, -Math.sin(cam.r[0]), Math.cos(cam.r[0])]
+      ]
+      const rot_m_2 = [
+        [Math.cos(cam.r[1]), 0, -Math.sin(cam.r[1])],
+        [0, 1, 0],
+        [Math.sin(cam.r[1]), 0, Math.cos(cam.r[1])]
+      ]
+      const rot_m_3 = [
+        [Math.cos(cam.r[2]), Math.sin(cam.r[2]), 0],
+        [-Math.sin(cam.r[2]), Math.cos(cam.r[2]), 0],
+        [0, 0, 1]
+      ]
+      d= Matrix_x_3Vector(d,rot_m_1)
+      d = Matrix_x_3Vector(d,rot_m_2)
+      d = Matrix_x_3Vector(d,rot_m_3)
+      
+      
+
+      let o = new Point(0,0,0)
+      o.x = Math.round((cam.dist/d.z) * d.x + WIDTH/2)
+      o.y = Math.round((cam.dist/d.z) * d.y + HEIGHT/2)
+      
+      return o
     }
+    function Matrix_x_3Vector(i,m){
+      let o = new Point(0,0,0)
+      o.x = i.x * m[0][0] + i.y * m[0][1] + i.z * m[0][2]
+      o.y = i.x * m[1][0] + i.y * m[1][1] + i.z * m[1][2]
+      o.z = i.x * m[2][0] + i.y * m[2][1] + i.z * m[2][2]
+      return o
+    }
+
+    // function Matrix_x_4Vector(i, m){
+    //   let o = new Point(0,0,0)
+    //   o.x = i.x * m[0][0] + i.y * m[1][0] + i.z * m[2][0] + m[3][0]
+    //   o.y = i.x * m[0][1] + i.y * m[1][1] + i.z * m[2][1] + m[3][1]
+    //   o.z = i.x * m[0][2] + i.y * m[1][2] + i.z * m[2][2] + m[3][2]
+    //   let w = i.x * m[0][3] + i.y * m[1][3] + i.z * m[2][3] + m[3][3]
+    //   if (w != 0){
+    //     o.x /= w
+    //     o.y /= w
+    //     o.z /= w
+    //   }
+    //   o.x = Math.round(o.x)
+    //   o.y = Math.round(o.y)
+    //   o.z = Math.round(o.z)
+    //   return o
+    // }
+
 
     function clear() {
       buffer.fill(0)
@@ -81,10 +178,20 @@
     }
 
 
-    function setCol(x_col, ystart, ystop, r, g, b) {
-      ystart = Math.floor(ystart);
-      ystop  = Math.floor(ystop);
-      for (let y_col = ystart; y_col < ystop; y_col++){
+    function setRow(x_col, ystart, ystop, r, g, b) {
+      if (ystart > ystop){
+        [ystart,ystop] = [ystop, ystart]
+      }
+      for (let y_col = ystart; y_col <= ystop; y_col++){
+        setPixel(x_col,y_col, r, g, b);
+      }
+    }
+
+    function setCol(y_col, xstart, xstop, r, g, b) {
+      if (xstart > xstop){
+        [xstart,xstop] = [xstop, xstart]
+      }
+      for (let x_col = xstart; x_col <= xstop; x_col++){
         setPixel(x_col,y_col, r, g, b);
       }
     }
@@ -93,54 +200,128 @@
 
     function drawLine(b,e){
       let d_x = b.x-e.x
-      let v = -1* Math.abs(d_x)/d_x
+      let v = (d_x > 0) ? -1 : 1;
       let d_y = b.y-e.y
-      let r = -1* Math.abs(d_y)/d_y
+      let r = (d_y > 0) ? -1 : 1;
+      if(d_x == 0){
+        setCol(b.x, Math.min(b.y, e.y), Math.max(b.y, e.y), 200,200,200)
+        return
+      }
+      if(d_y == 0){
+        setRow(b.y, Math.min(b.x, e.x), Math.max(b.x, e.x), 200,200,200)
+        return
+      }
+      let s = Math.abs(d_y / d_x)
       if (Math.abs(d_x) >= Math.abs(d_y)){
         for(let sx = 0; sx <= Math.abs(d_x); sx++){
           let c_x = b.x + (sx * v)
-          let c_y = Math.floor(b.y + (Math.abs(d_y / d_x) * sx * r))
+          let c_y = Math.round(b.y + (s * sx * r))
           setPixel(c_x,c_y,200,200,200)
         }
       }else{
         for(let sy = 0; sy <= Math.abs(d_y); sy++){
           let c_y = b.y + (sy*r)
-          let c_x = Math.floor(b.x + (Math.abs(d_x / d_y) * sy * v))
+          let c_x = Math.round(b.x + (1/s * sy * v))
           setPixel(c_x,c_y,200,200,200)
         }
       }
     }
 
     function draw_obj(){
-      drawLine(point_1,point_2)
-      drawLine(point_3,point_2)
-      drawLine(point_1,point_3)
+      faces.forEach(element => {
+        element.draw()
+      });
+      
+    }
+
+    function sort_by_y(point_list){
+      point_list.sort((a,b) => a.y - b.y)
+      return point_list
     }
     
+    function fill_flat_bottom(p1,p2,p3) {
+      const y_diff = p2.y - p1.y
+      const p2_s = (p2.x - p1.x) / y_diff
+      const p3_s = (p3.x - p1.x) / y_diff
 
+      let l_2_x = p1.x
+      let l_3_x = p1.x
 
+      for(let curr_y = p1.y; curr_y <= p2.y; curr_y++){
+        if (wireframe && curr_y != p2.y){
+          setPixel(Math.round(l_2_x), curr_y, 200,200,200)
+          setPixel(Math.round(l_3_x), curr_y, 200,200,200)
+        }else{
+          setCol(curr_y, Math.round(l_2_x), Math.round(l_3_x), 200,200,200)
+        }
+        l_2_x += p2_s
+        l_3_x += p3_s
+      }
+      
+    }
+    
+    function fill_flat_top(p1,p2,p3) {
+      const y_diff = p3.y - p1.y
+      const p2_s = (p3.x - p2.x) / y_diff
+      const p1_s = (p3.x - p1.x) / y_diff
+
+      let l_2_x = p3.x
+      let l_1_x = p3.x
+
+      for(let curr_y = p3.y; curr_y >= p2.y; curr_y--){
+        if (wireframe &&  curr_y != p2.y){
+          setPixel(Math.round(l_2_x), curr_y, 200,200,200)
+          setPixel(Math.round(l_1_x), curr_y, 200,200,200)
+        }else{
+          setCol(curr_y, Math.round(l_2_x), Math.round(l_1_x), 200,200,200)
+        }
+        l_2_x -= p2_s
+        l_1_x -= p1_s
+      }
+      
+    }
+
+    function draw_tri_standard(p1,p2,p3){
+      [p1,p2,p3] = sort_by_y([p1,p2,p3])
+
+      if (p2.y == p3.y){
+        fill_flat_bottom(p1,p2,p3)
+      }else if (p1.y == p2.y){
+        fill_flat_top(p1,p2,p3)
+      }else{
+        let p4 = new Point(Math.round(p1.x + ((p2.y - p1.y)/(p3.y - p1.y)) * (p3.x - p1.x)), p2.y)
+        //p4.fill()
+        fill_flat_bottom(p1,p2,p4)
+        fill_flat_top(p2,p4,p3)
+      }
+
+    }
 
     function draw() {
       clear();
       draw_obj();
-      setPixel(0,10,200,200,200)
-      setPixel(60,60,200,200,200)
       ctx.putImageData(imageData, 0,0);
       requestAnimationFrame(draw);
     }
 
         
 
-    // window.addEventListener("keydown", e => {
-    //   m = 0
-    //   if (e.key === "ArrowLeft")  rot -= 4.5;
-    //   if (e.key === "ArrowRight") rot += 4.5;
-    //   if (e.key === "ArrowUp")    m += 5;
-    //   if (e.key === "ArrowDown")  m -= 5;
-    //   x += m * Math.cos(rot_rad)
-    //   z += m * Math.sin(rot_rad)
-    // });
-
+    window.addEventListener("keydown", e => {
+      m = 0
+      if (e.key === "ArrowLeft")  cam.m[0] -= 5;
+      if (e.key === "ArrowRight") cam.m[0] += 5;
+      if (e.key === "ArrowUp")    cam.m[2] += 1;
+      if (e.key === "ArrowDown")  cam.m[2] -= 1;
+      if (e.key === "w")  cam.r[0] -= 2/180 * Math.PI;
+      if (e.key === "s") cam.r[0] += 2/180 * Math.PI;
+      if (e.key === "a")    cam.r[1] += 2/180 * Math.PI;
+      if (e.key === "d")  cam.r[1] -= 2/180 * Math.PI;
+      if (e.key === "q")    cam.r[2] += 2/180 * Math.PI;
+      if (e.key === "e")  cam.r[2] -= 2/180 * Math.PI;
+      // let rot_rad = rot * Math.PI / 180;
+      // x += m * Math.cos(rot_rad)
+      // y += m * Math.sin(rot_rad)
+    });
     
 
     draw();
