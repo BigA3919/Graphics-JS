@@ -186,17 +186,30 @@
       requestAnimationFrame(draw);
     }
 
-        
+    function checkbounds(){
+      if (MAP[(y * WIDTH + x) | 0] == 1){
+        return false
+      }
+      return true
+    }
+
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft")  rot -= 4.5;
+      if (e.key === "ArrowRight") rot += 4.5;
+    });
 
     window.addEventListener("keydown", e => {
       m = 0
-      if (e.key === "ArrowLeft")  rot -= 4.5;
-      if (e.key === "ArrowRight") rot += 4.5;
-      if (e.key === "ArrowUp")    m += 5;
-      if (e.key === "ArrowDown")  m -= 5;
+      if (e.key === "ArrowUp")    m += 20;
+      if (e.key === "ArrowDown")  m -= 20;
       let rot_rad = rot * Math.PI / 180;
       x += m * Math.cos(rot_rad)
       y += m * Math.sin(rot_rad)
+      if (!checkbounds()){
+        x -= m * Math.cos(rot_rad)
+        y -= m * Math.sin(rot_rad)
+      }
+      
     });
 
     
