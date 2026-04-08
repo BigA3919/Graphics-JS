@@ -23,11 +23,11 @@
   <canvas id="screen"></canvas>
 
   <script>
-    const WIDTH = 400;
-    const HEIGHT = 220;
+    const WIDTH = 200;
+    const HEIGHT = 110;
     const FOV = 60.0;
     //const VIEW_D = 500
-    const SCALE = 2;
+    const SCALE = 4;
     const Znear = 5;
     const canvas = document.getElementById("screen");
     // const dpr = window.devicePixelRatio || 1;
@@ -183,11 +183,12 @@
       get_drawables() {
         //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
         let ret = []
+        ret.push(...this.b.get_drawables())
         this.faces.forEach(t => {
           let pot = t.get_drawables()
           if (!(pot === undefined)) ret.push(...pot)
         })
-        ret.push(...this.b.get_drawables())
+        
         return ret
         //plist.forEach((p) => {p.fill()})
       }
@@ -266,28 +267,39 @@
     function rotation_matrix(i){
 
       let d = new Point(i.x-cam.m[0], i.y-cam.m[1], i.z-cam.m[2])
-      let ry = -cam.r[0]
-      let rx = -cam.r[1]
-      let rz = -cam.r[2]
+      const ry = -cam.r[0]
+      const rx = -cam.r[1]
+      const rz = -cam.r[2]
+      const cx = Math.cos(-ry)
+      const sx = Math.sin(-ry)
+      const cy = Math.cos(rx)
+      const sy = Math.sin(rx)
+
+      const R = [
+        [ cy,      0,     sy ],
+        [ sx*sy,   cx,   -sx*cy ],
+        [ -cx*sy,  sx,    cx*cy ]
+      ]
       //let rz = -Math.atan(Math.sin(-cam.r[1]) * Math.tan(-cam.r[0]))
-      const rot_m_1 = [
-        [1, 0, 0],
-        [0, Math.cos(ry), Math.sin(ry)],
-        [0, -Math.sin(ry), Math.cos(ry)]
-      ]
-      const rot_m_2 = [
-        [Math.cos(rx), 0, Math.sin(rx)],
-        [0, 1, 0],
-        [-Math.sin(rx), 0, Math.cos(rx)]
-      ]
-      const rot_m_3 = [
-        [Math.cos(rz), Math.sin(rz), 0],
-        [-Math.sin(rz), Math.cos(rz), 0],
-        [0, 0, 1]
-      ]
-      d = Matrix_x_3Vector(d,rot_m_1)
-      d = Matrix_x_3Vector(d,rot_m_2)
-      d = Matrix_x_3Vector(d,rot_m_3)
+      // const rot_m_1 = [
+      //   [1, 0, 0],
+      //   [0, Math.cos(ry), Math.sin(ry)],
+      //   [0, -Math.sin(ry), Math.cos(ry)]
+      // ]
+      // const rot_m_2 = [
+      //   [Math.cos(rx), 0, Math.sin(rx)],
+      //   [0, 1, 0],
+      //   [-Math.sin(rx), 0, Math.cos(rx)]
+      // ]
+      // const rot_m_3 = [
+      //   [Math.cos(rz), Math.sin(rz), 0],
+      //   [-Math.sin(rz), Math.cos(rz), 0],
+      //   [0, 0, 1]
+      // ]
+      // d = Matrix_x_3Vector(d,rot_m_1)
+      // d = Matrix_x_3Vector(d,rot_m_2)
+      // d = Matrix_x_3Vector(d,rot_m_3)
+      d = Matrix_x_3Vector(d,R)
       
       return d
     }
@@ -520,8 +532,8 @@
       if (keysPressed["s"]) cam.r[0] -= 2/180 * Math.PI;
       if (keysPressed["a"])    cam.r[1] -= 2/180 * Math.PI;
       if (keysPressed["d"])  cam.r[1] += 2/180 * Math.PI;
-      if (keysPressed["q"])    cam.r[2] += 2/180 * Math.PI;
-      if (keysPressed["e"])  cam.r[2] -= 2/180 * Math.PI;
+      // if (keysPressed["q"])    cam.r[2] += 2/180 * Math.PI;
+      // if (keysPressed["e"])  cam.r[2] -= 2/180 * Math.PI;
       if (keysPressed["i"])    cam.m[1] += 3
       if (keysPressed["k"])  cam.m[1] -= 3
       cam.r[0] = Math.max(-Math.PI/2, Math.min(Math.PI/2, cam.r[0]))
