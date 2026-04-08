@@ -17,15 +17,17 @@
     }
   </style>
 </head>
+
 <body>
+
   <canvas id="screen"></canvas>
 
   <script>
-    const WIDTH = 180;
-    const HEIGHT = 110;
+    const WIDTH = 400;
+    const HEIGHT = 220;
     const FOV = 60.0;
-    const VIEW_D = 500
-    const SCALE = 3;
+    //const VIEW_D = 500
+    const SCALE = 2;
     const Znear = 5;
     const canvas = document.getElementById("screen");
     // const dpr = window.devicePixelRatio || 1;
@@ -46,7 +48,9 @@
     const wireframe = false
     // Simple "cursor"
     let cam ={
-        m: [0,20,0],
+        v: 0,
+        a: 0,
+        m: [0,20,-50],
         dist:10,
         r: [0,0,0],
         fov: Math.PI/3,
@@ -65,7 +69,11 @@
     // ]
     
     class Drawable {
-      
+      constructor(tri, z, c){
+        this.tri = tri
+        this.z = z
+        this.c = c
+      }
     }
 
     class Point {
@@ -96,17 +104,41 @@
         this.points = [p1,p2,p3]
       }
 
+      get_drawables(){
+        let plist = this.points.map(point => rotation_matrix(point))
+        if (!isFrontFace(...plist)) return []
+        plist = zPlaneCLipping(plist)
+        if (plist.length != 0){
+          let max_z = Math.min(plist[0].z,plist[1].z,plist[2].z)
+          max_z = Math.max(Znear, max_z)
+          plist = plist.map(point => project(point))
+          if (plist.length == 6){
+            return [new Drawable(plist.slice(0,3), max_z, this.c), new Drawable(plist.slice(3), max_z, this.c)]
+          }else{
+            return [new Drawable(plist, max_z, this.c)]
+          }
+        }else{
+          return []
+        }
+      }
       draw(){
         let plist = this.points.map(point => rotation_matrix(point))
         if (!isFrontFace(...plist)) return
         plist = zPlaneCLipping(plist)
         if (plist.length != 0){
           plist = plist.map(point => project(point))
-          draw_tri_standard(...plist,this.c)
+          if (plist.length == 6){
+            draw_tri_standard(...plist.slice(0,3),this.c)
+            draw_tri_standard(...plist.slice(3),this.c)
+          }else{
+            draw_tri_standard(...plist,this.c)
+          }
+         
         }
       }
     }
     //s if side
+
     class Rect {
       constructor(bl, tr, c, s = false){
         this.tl = new Point(bl[0], tr[1], s == false ? tr[2] : bl[2])
@@ -115,11 +147,21 @@
         this.br = new Point(tr[0], bl[1], s == true ? tr[2] : bl[2])
         this.points = [this.bl, this.tl, this.tr, this.br]
         this.tris = [new Tri(this.bl,this.tl,this.tr, c), 
-                     new Tri(this.tr,this.br,this.bl, c)]
+                    new Tri(this.tr,this.br,this.bl, c)]
         this.c = c
         
       }
 
+      get_drawables() {
+        //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
+        let ret = []
+        this.tris.forEach(t => {
+          let pot = t.get_drawables()
+          if (!(pot.length == 0)) ret.push(...pot)
+        })
+        return ret
+        //plist.forEach((p) => {p.fill()})
+      }
       draw() {
         //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
         
@@ -127,13 +169,64 @@
         //plist.forEach((p) => {p.fill()})
       }
     }
+    //currently kind of broken
+    class Pyramid{
+      constructor(bl,tr,ph,c){
+        this.b = new Rect(tr,bl,c-80)
+        this.faces = [
+          new Tri(new Point(...bl), new Point(...ph), new Point(tr[0], bl[1],bl[2]), c), 
+          new Tri(new Point(tr[0], bl[1],bl[2]), new Point(...ph), new Point(...tr), c-20), 
+          new Tri(new Point(...tr), new Point(...ph), new Point(bl[0], bl[1], tr[2]), c-40), 
+          new Tri(new Point(bl[0], bl[1], tr[2]), new Point(...ph), new Point(...bl), c-60), 
+        ]
+      }
+      get_drawables() {
+        //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
+        let ret = []
+        this.faces.forEach(t => {
+          let pot = t.get_drawables()
+          if (!(pot === undefined)) ret.push(pot)
+        })
+        ret.push(...this.b.get_drawables())
+        return ret
+        //plist.forEach((p) => {p.fill()})
+      }
+      draw() {
+        //const plist = this.points.map(point => Matrix_x_Vector(point, projection_matrix))
+        
+        this.faces.forEach((t) => {t.draw()})
+        this.b.draw()
+        //plist.forEach((p) => {p.fill()})
+      }
+      
+    }
+
+    function intersect(p1, p2) {
+      const t = (Znear - p1.z) / (p2.z - p1.z)
+      return new Point(
+        p1.x + t * (p2.x - p1.x),
+        p1.y + t * (p2.y - p1.y),
+        Znear
+      )
+    }
 
     function zPlaneCLipping(plist){
       let inlist = plist.filter(p => p.z >= Znear)
       let outlist = plist.filter(p => p.z < Znear)
-      if (inlist.length == 3) return plist
-      if (inlist.length == 0) return []
-      return []
+      switch(inlist.length){
+        case 3:
+          return plist
+        case 0:
+          return []
+        case 1:
+          return [inlist[0], intersect(inlist[0],outlist[0]),intersect(inlist[0],outlist[1])]
+        case 2:
+          const p = intersect(inlist[0],outlist[0])
+          return [inlist[0], inlist[1],p,
+                  inlist[1],intersect(inlist[1],outlist[0]), p]
+        
+
+      }
 
     }
     
@@ -148,31 +241,44 @@
           new Rect([bl[0],tr[1],bl[2]], tr, 120)
         ]
       }
+      get_drawables(){
+        let ret = []
+        this.faces.forEach((p) => {ret.push(...p.get_drawables())})
+        return ret
+      }
       draw(){
         this.faces.forEach((p) => {p.draw()})
       }
     }
 
     const cubes = [
-      new Cube([-10,0,30], [10,20,50]),  new Cube([-80,0,120], [-60,40,140])
+      //new Pyramid([-30,0,-20],[0,0,0], [-15,50,-10],200),
+      new Cube([-10,0,30], [10,20,50]),  
+      new Cube([-80,0,120], [-60,40,140]),
+      new Cube([20,40,30], [60,50,50]),  
+      new Cube([10,0,180], [20,40,200])
+      // ,
+      // new Cube([-10,0,30], [10,20,50]),  
+      // new Cube([-80,0,120], [-60,40,140])
     ]
   
 
     function rotation_matrix(i){
 
       let d = new Point(i.x-cam.m[0], i.y-cam.m[1], i.z-cam.m[2])
-      let rx = -cam.r[0]
-      let ry = -cam.r[1]
+      let ry = -cam.r[0]
+      let rx = -cam.r[1]
       let rz = -cam.r[2]
+      //let rz = -Math.atan(Math.sin(-cam.r[1]) * Math.tan(-cam.r[0]))
       const rot_m_1 = [
         [1, 0, 0],
-        [0, Math.cos(rx), Math.sin(rx)],
-        [0, -Math.sin(rx), Math.cos(rx)]
+        [0, Math.cos(ry), Math.sin(ry)],
+        [0, -Math.sin(ry), Math.cos(ry)]
       ]
       const rot_m_2 = [
-        [Math.cos(ry), 0, Math.sin(ry)],
+        [Math.cos(rx), 0, Math.sin(rx)],
         [0, 1, 0],
-        [-Math.sin(ry), 0, Math.cos(ry)]
+        [-Math.sin(rx), 0, Math.cos(rx)]
       ]
       const rot_m_3 = [
         [Math.cos(rz), Math.sin(rz), 0],
@@ -315,13 +421,22 @@
       }
     }
 
+    let ground = new Rect([-300,0,-100], [300,0,300], 100)
+
     function draw_obj(){
       // s_d = VIEW_D * sin(FOV)
       // bounds = Rect([cam.m[0]-s_d*Math.cos(cam.r[1]), 0, cam.m[2]+s_d*Math.sin(cam.r[1])],
       //                  [cam.m[0]+s_d*Math.cos(cam.r[1]) + VIEW_D*Math.sin(cam.r[1]), 0, cam.m[2]-s_d*Math.sin(cam.r[1]) + VIEW_D*Math.cos(cam.r[1])])
+      ground.draw()
+      let draw_list = []
       cubes.forEach(element => {
-        element.draw()
+        draw_list.push(...element.get_drawables())
       });
+      draw_list.sort((a,b) => b.z - a.z)
+      //draw_list.reverse()
+      draw_list.forEach(item =>{
+        draw_tri_standard(...item.tri,item.c)
+      })
     }
 
     function sort_by_y(point_list){
@@ -389,39 +504,46 @@
 
     function draw() {
       clear();
+      handle_movement()
       draw_obj();
       ctx.putImageData(imageData, 0,0);
       requestAnimationFrame(draw);
     }
 
-        
+    function handle_movement(){
+      cam.m[2] += cam.v * Math.cos(cam.r[1]) 
+      // cam.m[1] += m * -Math.sin(cam.r[0])
+      cam.m[0] += cam.v * Math.sin(cam.r[1])
+      
+      cam.v *= 0.9
+      if(Math.abs(cam.v) < 0.1) cam.v = 0;
+      
+    }
 
     window.addEventListener("keydown", e => {
-      m = 0
       sm = 0
       if (e.key === "ArrowLeft")  sm -= 3;
       if (e.key === "ArrowRight") sm += 3;
-      if (e.key === "ArrowUp")    m += 3;
-      if (e.key === "ArrowDown")  m -= 3;
+      if (e.key === "ArrowUp")    cam.v += 0.5;
+      if (e.key === "ArrowDown")  cam.v -= 0.5;
       if (e.key === "w")  cam.r[0] += 2/180 * Math.PI;
       if (e.key === "s") cam.r[0] -= 2/180 * Math.PI;
       if (e.key === "a")    cam.r[1] -= 2/180 * Math.PI;
       if (e.key === "d")  cam.r[1] += 2/180 * Math.PI;
       if (e.key === "q")    cam.r[2] += 2/180 * Math.PI;
       if (e.key === "e")  cam.r[2] -= 2/180 * Math.PI;
-      if (e.key === "i")    cam.m[1] -= 3
-      if (e.key === "k")  cam.m[1] += 3
+      if (e.key === "i")    cam.m[1] += 3
+      if (e.key === "k")  cam.m[1] -= 3
+      cam.r[0] = Math.max(-Math.PI/2, Math.min(Math.PI/2, cam.r[0]))
+
+      // sa /= 1.05
+
+      // if(Math.abs(sa) < 0.02) sa = 0;
       // let rot_rad = rot * Math.PI / 180;
-      cam.m[2] += m * Math.cos(cam.r[1]) * Math.cos(cam.r[0])
-      cam.m[1] += m * -Math.sin(cam.r[0])
-      cam.m[0] += m * Math.sin(cam.r[1]) * Math.cos(cam.r[0])
-
+      //cam.r[2] =  Math.atan(Math.sin(cam.r[0]) * Math.cos(cam.r[1]))
       cam.m[0] += sm * Math.cos(cam.r[1])
-      cam.m[1] += sm * 0
+      // cam.m[1] += sm * 0
       cam.m[2] += sm * -Math.sin(cam.r[1])
-
-
-
     });
     
 
